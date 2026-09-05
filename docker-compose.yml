@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  db:
+    image: ankane/pgvector:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: revenueos
+      POSTGRES_PASSWORD: revenueos
+      POSTGRES_DB: revenueos
+    ports:
+      - "5432:5432"
+    volumes:
+      - revenueos_pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+volumes:
+  revenueos_pgdata:

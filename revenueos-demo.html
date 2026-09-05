@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>RevenueOS — Demo Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0b0f19; --card: #131a2b; --border: #232c42; --text: #e7ecf7;
+    --muted: #8b95ab; --accent: #6ea8fe; --good: #35d399; --warn: #f5a623; --bad: #f26d6d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  #apiBase { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; font-size: 12px; width: 240px; }
+  #status { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+  #status.ok { background: rgba(53,211,153,0.15); color: var(--good); }
+  #status.bad { background: rgba(242,109,109,0.15); color: var(--bad); }
+  main { padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; max-width: 1400px; margin: 0 auto; }
+  section.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+  section.card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 14px; }
+  .kpis { display: flex; gap: 12px; flex-wrap: wrap; }
+  .kpi { flex: 1; min-width: 120px; }
+  .kpi .value { font-size: 22px; font-weight: 700; }
+  .kpi .label { font-size: 11px; color: var(--muted); }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+  .bar-row .label { width: 70px; color: var(--muted); }
+  .bar-track { flex: 1; background: #1c2438; border-radius: 4px; overflow: hidden; height: 10px; }
+  .bar-fill { height: 100%; background: var(--accent); }
+  .drop { font-size: 12px; color: var(--warn); margin-top: 6px; }
+  input[type=text], textarea { width: 100%; background: #0f1524; border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px; }
+  button { cursor: pointer; background: var(--accent); border: none; color: #06101f; font-weight: 600; padding: 8px 14px; border-radius: 6px; font-size: 13px; }
+  button.secondary { background: #1c2438; color: var(--text); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .list-item { border-bottom: 1px solid var(--border); padding: 10px 0; font-size: 13px; }
+  .list-item:last-child { border-bottom: none; }
+  .tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 999px; background: #1c2438; color: var(--muted); margin-right: 6px; }
+  .tag.high { background: rgba(242,109,109,0.15); color: var(--bad); }
+  .tag.medium { background: rgba(245,166,35,0.15); color: var(--warn); }
+  pre { background: #0f1524; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 11px; overflow: auto; max-height: 220px; white-space: pre-wrap; word-break: break-word; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .guardrail-field { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; }
+  .guardrail-field input { width: 120px; }
+  .full { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>RevenueOS — Demo Dashboard</h1>
+    <div class="sub">Calls the FastAPI backend directly (in-memory demo mode)</div>
+  </div>
+  <div class="row" style="margin:0;align-items:center;">
+    <input id="apiBase" type="text" value="http://127.0.0.1:8000" />
+    <span id="status" class="bad">checking…</span>
+    <button class="secondary" onclick="refreshAll()">Refresh</button>
+  </div>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>Dashboard</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="value" id="kpiRevenue">—</div><div class="label">Revenue (30d)</div></div>
+      <div class="kpi"><div class="value" id="kpiAiRevenue">—</div><div class="label">AI-attributed</div></div>
+      <div class="kpi"><div class="value" id="kpiOpp">—</div><div class="label">Open opportunities</div></div>
+    </div>
+    <div style="margin-top:16px" id="funnelBars"></div>
+    <div class="drop" id="funnelDrop"></div>
+  </section>
+
+  <section class="card">
+    <h2>AI Command Center</h2>
+    <div class="row">
+      <input id="commandInput" type="text" placeholder="e.g. why did revenue drop? / launch experiment" />
+      <button onclick="runCommand()">Ask</button>
+    </div>
+    <pre id="commandResult">Try: "why did revenue drop", "biggest leak", "recommend a bundle", "draft an offer for high intent customers", "launch experiment"</pre>
+  </section>
+
+  <section class="card">
+    <h2>Shopping Assistant</h2>
+    <div class="row">
+      <input id="shoppingInput" type="text" value="laptop under 80k for coding and gaming" />
+      <button onclick="runShopping()">Search</button>
+    </div>
+    <pre id="shoppingResult">Bundle + guardrail-checked offer will show here.</pre>
+  </section>
+
+  <section class="card">
+    <h2>Growth Opportunities</h2>
+    <div id="opportunities" class="muted">Loading…</div>
+  </section>
+
+  <section class="card">
+    <h2>Churn & Win-back</h2>
+    <div id="churn" class="muted">Loading…</div>
+  </section>
+
+  <section class="card">
+    <h2>Guardrails</h2>
+    <div id="guardrails" class="muted">Loading…</div>
+    <button onclick="saveGuardrails()" style="margin-top:8px">Save changes</button>
+  </section>
+
+  <section class="card full">
+    <h2>Agent Activity Log</h2>
+    <div id="activity" class="muted">Loading…</div>
+  </section>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const apiBase = () => $('apiBase').value.replace(/\/$/, '');
+
+async function api(path, options) {
+  const res = await fetch(apiBase() + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+  return res.json();
+}
+
+function money(n) {
+  if (n === undefined || n === null) return '—';
+  return '₹' + Number(n).toLocaleString('en-IN');
+}
+
+async function checkHealth() {
+  const el = $('status');
+  try {
+    await api('/api/health');
+    el.textContent = 'connected';
+    el.className = 'ok';
+    return true;
+  } catch (e) {
+    el.textContent = 'disconnected: ' + e.message;
+    el.className = 'bad';
+    return false;
+  }
+}
+
+async function loadDashboard() {
+  const d = await api('/api/dashboard');
+  $('kpiRevenue').textContent = money(d.revenue_30d);
+  $('kpiAiRevenue').textContent = money(d.ai_attributed_revenue);
+  $('kpiOpp').textContent = money(d.open_opportunities_value);
+
+  const f = d.funnel;
+  const max = Math.max(...Object.values(f));
+  $('funnelBars').innerHTML = Object.entries(f).map(([stage, val]) => `
+    <div class="bar-row">
+      <div class="label">${stage}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(val / max * 100).toFixed(1)}%"></div></div>
+      <div style="width:50px;text-align:right">${val}</div>
+    </div>`).join('');
+
+  const bd = d.funnel_insight.biggest_drop;
+  $('funnelDrop').textContent = `Biggest drop: ${bd.from} → ${bd.to} (${bd.drop_rate}% lost, ${bd.lost} customers) · overall conversion ${d.funnel_insight.overall_conversion_pct}%`;
+}
+
+async function runCommand() {
+  const text = $('commandInput').value.trim();
+  if (!text) return;
+  $('commandResult').textContent = 'Thinking…';
+  try {
+    const r = await api('/api/command', { method: 'POST', body: JSON.stringify({ text }) });
+    $('commandResult').textContent = `[${r.agent}] ${r.answer}\n\n` + JSON.stringify(r.data, null, 2);
+    loadActivity();
+  } catch (e) {
+    $('commandResult').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function runShopping() {
+  const text = $('shoppingInput').value.trim();
+  if (!text) return;
+  $('shoppingResult').textContent = 'Searching…';
+  try {
+    const r = await api('/api/shopping/query', { method: 'POST', body: JSON.stringify({ text }) });
+    $('shoppingResult').textContent = JSON.stringify(r, null, 2);
+    loadActivity();
+  } catch (e) {
+    $('shoppingResult').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function loadOpportunities() {
+  const r = await api('/api/opportunities');
+  $('opportunities').innerHTML = r.opportunities.map(o => `
+    <div class="list-item">
+      <span class="tag ${o.impact}">${o.impact}</span><b>${o.title}</b><br/>
+      <span class="muted">${o.action}</span><br/>
+      <span class="muted">${money(o.revenue_per_month)}/mo · ${o.confidence_pct}% confidence</span>
+      <div style="margin-top:6px"><button class="secondary" onclick="approveOpportunity('${o.id}', this)">Approve</button></div>
+    </div>`).join('') || '<div class="muted">No opportunities.</div>';
+}
+
+async function approveOpportunity(id, btn) {
+  btn.disabled = true;
+  await api(`/api/opportunities/${id}/approve`, { method: 'POST' });
+  btn.textContent = 'Launched';
+  loadActivity();
+}
+
+async function loadChurn() {
+  const r = await api('/api/churn');
+  $('churn').innerHTML = r.customers.map(c => `
+    <div class="list-item">
+      <span class="tag ${c.risk === 'high' ? 'high' : c.risk === 'medium' ? 'medium' : ''}">${c.risk}</span>
+      <b>${c.name}</b> — LTV ${money(c.ltv)}, last order ${c.last_order_days_ago}d ago
+      ${c.offer ? `<div class="muted">Win-back offer: ${c.offer.pct}% off (${money(c.offer.amount)})</div>` : ''}
+      ${c.risk !== 'low' ? `<div style="margin-top:6px"><button class="secondary" onclick="sendWinback('${c.id}', this)">Send win-back offer</button></div>` : ''}
+    </div>`).join('') || '<div class="muted">No customers.</div>';
+}
+
+async function sendWinback(id, btn) {
+  btn.disabled = true;
+  await api(`/api/churn/${id}/send-offer`, { method: 'POST' });
+  btn.textContent = 'Sent';
+  loadActivity();
+}
+</script>
+
+</body>
+</html>
